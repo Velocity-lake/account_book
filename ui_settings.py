@@ -1,6 +1,8 @@
 import tkinter as tk
-from tkinter import ttk
-from storage import load_state, save_state, get_categories, add_category, get_category_rules, add_category_rule, remove_category_rule
+from tkinter import ttk, messagebox
+from storage import load_state, save_state, get_categories, add_category, get_category_rules, add_category_rule, remove_category_rule, set_ledger_path, BASE_DIR
+from theme import setup_theme
+import os
 
 class SettingsPage(ttk.Frame):
     def __init__(self, master, controller):
@@ -12,6 +14,11 @@ class SettingsPage(ttk.Frame):
         except Exception:
             val = getattr(controller, 'menu_layout_mode', 'classic')
         self.layout_var = tk.StringVar(value=val)
+        try:
+            s = load_state()
+            self.time_fmt_var = tk.StringVar(value=((s.get("prefs", {}) or {}).get("bill_list", {}).get("time_format", "date")))
+        except Exception:
+            self.time_fmt_var = tk.StringVar(value="date")
         self.build_ui()
 
     def build_ui(self):
@@ -23,6 +30,47 @@ class SettingsPage(ttk.Frame):
         layout.pack(fill=tk.X, padx=8, pady=8)
         ttk.Radiobutton(layout, text="经典布局", value="classic", variable=self.layout_var, command=self.on_layout_change).pack(side=tk.LEFT, padx=8, pady=6)
         ttk.Radiobutton(layout, text="精简布局", value="compact", variable=self.layout_var, command=self.on_layout_change).pack(side=tk.LEFT, padx=8, pady=6)
+
+        theme_box = ttk.LabelFrame(self, text="主题")
+        theme_box.pack(fill=tk.X, padx=8, pady=8)
+        try:
+            s = load_state()
+            cur_theme = (s.get("prefs", {}) or {}).get("theme", "light")
+        except Exception:
+            cur_theme = "light"
+        self.theme_var = tk.StringVar(value=cur_theme)
+        ttk.Radiobutton(theme_box, text="浅色", value="light", variable=self.theme_var, command=self.on_theme_change).pack(side=tk.LEFT, padx=8, pady=6)
+        ttk.Radiobutton(theme_box, text="深色", value="dark", variable=self.theme_var, command=self.on_theme_change).pack(side=tk.LEFT, padx=8, pady=6)
+
+        timefmt = ttk.LabelFrame(self, text="时间格式")
+        timefmt.pack(fill=tk.X, padx=8, pady=8)
+        ttk.Radiobutton(timefmt, text="日期+时分秒", value="full", variable=self.time_fmt_var, command=self.on_time_fmt_change).pack(side=tk.LEFT, padx=8, pady=6)
+        ttk.Radiobutton(timefmt, text="仅日期", value="date", variable=self.time_fmt_var, command=self.on_time_fmt_change).pack(side=tk.LEFT, padx=8, pady=6)
+
+        store = ttk.LabelFrame(self, text="数据存储与展示")
+        store.pack(fill=tk.X, padx=8, pady=8)
+        try:
+            s = load_state()
+            cur_backend = (s.get("prefs", {}) or {}).get("storage_backend", "sqlite")
+            use_pagi = bool((s.get("prefs", {}) or {}).get("use_pagination", False))
+        except Exception:
+            cur_backend = "sqlite"
+            use_pagi = False
+        self.backend_var = tk.StringVar(value=(cur_backend if cur_backend in ("sqlite","json") else "sqlite"))
+        self.pagi_var = tk.BooleanVar(value=use_pagi)
+        ttk.Radiobutton(store, text="使用SQLite存储", value="sqlite", variable=self.backend_var, command=self.on_backend_change).pack(side=tk.LEFT, padx=8, pady=6)
+        ttk.Radiobutton(store, text="使用JSON存储", value="json", variable=self.backend_var, command=self.on_backend_change).pack(side=tk.LEFT, padx=8, pady=6)
+        ttk.Checkbutton(store, text="启用分页模式", variable=self.pagi_var, command=self.on_pagination_toggle).pack(side=tk.LEFT, padx=8, pady=6)
+
+        user_mgmt = ttk.LabelFrame(self, text="用户账户管理")
+        user_mgmt.pack(fill=tk.X, padx=8, pady=8)
+        try:
+            s = load_state()
+            enabled = bool((s.get("prefs", {}) or {}).get("user_management_enabled", False))
+        except Exception:
+            enabled = False
+        self.user_mgmt_var = tk.BooleanVar(value=enabled)
+        ttk.Checkbutton(user_mgmt, text="启用用户账户管理（可随时关闭并回到单用户）", variable=self.user_mgmt_var, command=self.on_user_mgmt_toggle).pack(side=tk.LEFT, padx=8, pady=6)
 
         data = ttk.LabelFrame(self, text="数据导入导出")
         data.pack(fill=tk.X, padx=8, pady=8)
@@ -38,6 +86,8 @@ class SettingsPage(ttk.Frame):
         system = ttk.LabelFrame(self, text="系统与工具")
         system.pack(fill=tk.X, padx=8, pady=8)
         ttk.Button(system, text="刷新数据", command=self.controller.refresh_all).pack(side=tk.LEFT, padx=6, pady=6)
+        ttk.Button(system, text="打开使用说明书", command=self.open_manual).pack(side=tk.LEFT, padx=6, pady=6)
+        
 
         ai = ttk.LabelFrame(self, text="消费类别预填（关键词规则）")
         ai.pack(fill=tk.BOTH, padx=8, pady=8)
@@ -81,6 +131,19 @@ class SettingsPage(ttk.Frame):
         ttk.Button(btns, text="重置全部规则", command=self.on_reset_rules).pack(side=tk.LEFT, padx=6)
         self._reload_rules()
 
+    def open_manual(self):
+        try:
+            path = os.path.join(BASE_DIR, "使用说明书.md")
+            if not os.path.isfile(path):
+                messagebox.showerror("未找到", f"未找到说明书文件：{path}")
+                return
+            os.startfile(path)
+        except Exception as e:
+            try:
+                messagebox.showerror("打开失败", str(e))
+            except Exception:
+                pass
+
     def on_layout_change(self):
         mode = self.layout_var.get()
         self.controller.set_menu_layout(mode)
@@ -88,6 +151,85 @@ class SettingsPage(ttk.Frame):
             s = load_state()
             s.setdefault("prefs", {})["menu_layout"] = mode
             save_state(s)
+        except Exception:
+            pass
+
+    def on_theme_change(self):
+        try:
+            s = load_state()
+            s.setdefault("prefs", {})["theme"] = (self.theme_var.get() if self.theme_var.get() in ("light","dark") else "light")
+            save_state(s)
+            try:
+                setup_theme(self.winfo_toplevel(), s.get("prefs", {}).get("theme", "light"))
+            except Exception:
+                pass
+        except Exception:
+            pass
+
+    def on_user_mgmt_toggle(self):
+        try:
+            s = load_state()
+            s.setdefault("prefs", {})["user_management_enabled"] = bool(self.user_mgmt_var.get())
+            save_state(s)
+            try:
+                self.controller.user_mgmt_enabled = bool(self.user_mgmt_var.get())
+                self.controller.build_sidebar()
+                if self.controller.user_mgmt_enabled:
+                    self.controller.show_login_dialog()
+                else:
+                    if messagebox.askyesno("回退为单用户", "是否将当前用户数据恢复到单用户账本？"):
+                        try:
+                            cur = load_state()
+                            set_ledger_path(None)
+                            save_state(cur)
+                            self.controller.refresh_all()
+                        except Exception:
+                            pass
+            except Exception:
+                pass
+        except Exception:
+            pass
+
+    def on_time_fmt_change(self):
+        try:
+            s = load_state()
+            bl = s.setdefault("prefs", {}).setdefault("bill_list", {})
+            bl["time_format"] = self.time_fmt_var.get() if self.time_fmt_var.get() in ("full","date") else "date"
+            save_state(s)
+            try:
+                self.controller.refresh_all()
+            except Exception:
+                pass
+        except Exception:
+            pass
+
+    def on_backend_change(self):
+        try:
+            s = load_state()
+            s.setdefault("prefs", {})["storage_backend"] = (self.backend_var.get() if self.backend_var.get() in ("sqlite","json") else "sqlite")
+            save_state(s)
+            try:
+                from storage import migrate_json_to_sqlite
+                if self.backend_var.get() == "sqlite":
+                    migrate_json_to_sqlite()
+            except Exception:
+                pass
+            try:
+                self.controller.refresh_all()
+            except Exception:
+                pass
+        except Exception:
+            pass
+
+    def on_pagination_toggle(self):
+        try:
+            s = load_state()
+            s.setdefault("prefs", {})["use_pagination"] = bool(self.pagi_var.get())
+            save_state(s)
+            try:
+                self.controller.refresh_all()
+            except Exception:
+                pass
         except Exception:
             pass
 
@@ -139,3 +281,5 @@ class SettingsPage(ttk.Frame):
         s.setdefault("category_rules", {})["支出"] = []
         save_state(s)
         self._reload_rules()
+
+    

@@ -82,7 +82,7 @@ def read_xlsx(path):
     header_idx = None
     for i, r in enumerate(rows):
         lowered = [str(x).strip() for x in r]
-        if any(h in lowered for h in ["交易时间", "金额", "金额(元)"]):
+        if any(h in lowered for h in ["交易时间", "格式化时间", "Formatted Time", "金额", "金额(元)", "交易金额", "Transaction Amount"]):
             header_idx = i
             break
     if header_idx is None:
@@ -94,6 +94,40 @@ def read_xlsx(path):
         for i in range(min(len(header), len(r))):
             key = header[i] if header[i] else f"列{i}"
             d[key] = r[i]
+            d[f"列{i}"] = r[i]
         if any(str(v).strip() != '' for v in d.values()):
             out.append(d)
     return out
+
+def read_xlsx_rows(path):
+    with zipfile.ZipFile(path) as z:
+        shared = _parse_shared_strings(z)
+        sheet_path = 'xl/worksheets/sheet1.xml'
+        try:
+            with z.open(sheet_path) as f:
+                root = ET.fromstring(f.read())
+        except KeyError:
+            return []
+    rows = []
+    for row in root.iter():
+        tag = row.tag if isinstance(row.tag, str) else ''
+        if tag.endswith('row'):
+            cells = {}
+            max_idx = -1
+            for c in row:
+                ctag = c.tag if isinstance(c.tag, str) else ''
+                if not ctag.endswith('c'):
+                    continue
+                ref = c.attrib.get('r', '')
+                col = ''.join(ch for ch in ref if ch.isalpha())
+                idx = _col_to_index(col) if col else (max_idx + 1)
+                val = _cell_value(c, shared)
+                cells[idx] = val
+                if idx > max_idx:
+                    max_idx = idx
+            if max_idx >= 0:
+                row_vals = [''] * (max_idx + 1)
+                for i, v in cells.items():
+                    row_vals[i] = v
+                rows.append(row_vals)
+    return rows

@@ -20,4 +20,6 @@ def create_icons(root):
         'template': _make_icon('#6e6e73'),    # slate
         'backup': _make_icon('#ffd60a'),      # yellow
         'refresh': _make_icon('#8e8e93'),     # gray
+        'help': _make_icon('#2c2c2e'),        # dark gray
+        'invest': _make_icon('#00b894'),      # greenish
     }

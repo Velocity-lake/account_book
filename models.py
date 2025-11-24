@@ -16,6 +16,13 @@ class Account:
     balance: float = 0.0
     type: str = "普通账户"
     note: str = ""
+    bank: str = ""
+    last4: str = ""
+    limit: float = 0.0
+    status: str = "有效"
+    bill_day: int = 0
+    repay_day: int = 0
+    repay_offset: int = 0
 
     def to_dict(self):
         return asdict(self)

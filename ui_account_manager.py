@@ -2,9 +2,10 @@ import tkinter as tk
 from tkinter import ttk, messagebox, filedialog
 import os
 from datetime import datetime
-from storage import load_state, save_state, add_account, remove_account, rename_account, find_account, get_account_types
+from storage import load_state, save_state, add_account, remove_account, rename_account, find_account, get_account_types, get_account_names, apply_transaction_delta, add_category
 from models import Account
-from utils import format_amount
+from utils import format_amount, gen_id, normalize_ttype
+from ui_add_dialog import AddTransactionDialog
 
 class AccountManagerPage(ttk.Frame):
     def __init__(self, master):
@@ -32,12 +33,13 @@ class AccountManagerPage(ttk.Frame):
         ttk.Button(top, text="新增账户", command=self.on_add).pack(side=tk.RIGHT, padx=4)
         ttk.Button(top, text="删除账户", command=self.on_delete).pack(side=tk.RIGHT, padx=4)
         cols = ["账户名","余额","备注"]
-        self.tree = ttk.Treeview(self, columns=cols, show="tree headings")
+        self.tree = ttk.Treeview(self, columns=cols, show="headings")
         for c in cols:
             self.tree.heading(c, text=c)
             self.tree.column(c, width=200 if c != "备注" else 260)
         self.tree.pack(fill=tk.BOTH, expand=True, padx=8, pady=8)
         self.tree.tag_configure('negative', foreground='#ff3b30')
+        self.tree.tag_configure('group', foreground='#000000', font=('Segoe UI', 11, 'bold'))
         self.tree.bind("<Button-3>", self.on_right_click)
         self.tree.bind("<Double-1>", self.on_double_click)
         self.menu = tk.Menu(self, tearoff=0)
@@ -61,10 +63,9 @@ class AccountManagerPage(ttk.Frame):
             sums[t] = sums.get(t, 0.0) + bal
             counts[t] = counts.get(t, 0) + 1
         for typ in types:
-            label = f"{typ}（{counts.get(typ,0)}个账户）"
+            label = f"{typ} - {counts.get(typ,0)}个账户"
             sumv = sums.get(typ, 0.0)
-            tag = ('negative',) if sumv < 0 else ()
-            node = self.tree.insert("", tk.END, text=label, values=[label, format_amount(sumv), ""], open=True, tags=tag)
+            node = self.tree.insert("", tk.END, text=label, values=[label, format_amount(sumv), ""], open=True, tags=('group',))
             groups[typ] = node
         for a in self.state.get("accounts", []):
             bal = float(a.get("balance",0))
@@ -99,6 +100,21 @@ class AccountManagerPage(ttk.Frame):
 
     def on_double_click(self, event):
         if not self.edit_mode:
+            iid = self.tree.identify_row(event.y)
+            if not iid:
+                return
+            parent = self.tree.parent(iid)
+            if parent == "":
+                return
+            vals = self.tree.item(iid, 'values')
+            if not vals:
+                return
+            name = vals[0]
+            try:
+                from ui_bill_list import BillListDialog
+                BillListDialog(self, initial_filters={"account_related": name})
+            except Exception:
+                pass
             return
         region = self.tree.identify_region(event.x, event.y)
         if region not in ('cell','tree'):
@@ -124,6 +140,32 @@ class AccountManagerPage(ttk.Frame):
                 pass
         col_index = int(col_id.replace('#',''))
         val = vals[col_index-1] if col_index-1 < len(vals) else ""
+        if col_index == 0:
+            e = ttk.Entry()
+            e.insert(0, str(text))
+            def commit_tree():
+                new_name = e.get().strip()
+                if not new_name:
+                    return
+                old_name = text
+                if new_name != old_name:
+                    if messagebox.askyesno("同步账单", "是否同步修改账单中的账户名称？"):
+                        rename_account(self.state, old_name, new_name)
+                        a = find_account(self.state, new_name) or {}
+                        save_state(self.state)
+                    else:
+                        a = find_account(self.state, old_name) or {}
+                        if a:
+                            a["name"] = new_name
+                            save_state(self.state)
+                self.refresh()
+                e.destroy()
+            e.bind("<Return>", lambda ev: commit_tree())
+            e.bind("<Escape>", lambda ev: e.destroy())
+            e.place(x=absx, y=absy, width=w, height=h)
+            e.focus_set()
+            self._editor = e
+            return
         if col_index == 1:
             e = ttk.Entry()
             e.insert(0, str(val))
@@ -212,24 +254,23 @@ class AccountManagerPage(ttk.Frame):
         self.refresh()
 
     def export_accounts(self):
-        path = filedialog.asksaveasfilename(title="导出账户", defaultextension=".xlsx", filetypes=[("Excel 文件","*.xlsx"), ("CSV 文件","*.csv")])
-        if not path:
+        dir_path = filedialog.askdirectory(title="选择导出位置")
+        if not dir_path:
             return
         try:
             cols = ["名称","类型","余额","备注"]
             rows = []
             for a in load_state().get("accounts", []):
                 rows.append([a.get("name",""), a.get("type",""), str(a.get("balance",0)), a.get("note","")])
-            if path.lower().endswith('.csv'):
-                import csv
-                with open(path, "w", newline="", encoding="utf-8-sig") as f:
-                    w = csv.writer(f)
-                    w.writerow(cols)
-                    for r in rows:
-                        w.writerow(r)
-            else:
-                self._write_xlsx(path, cols, rows)
-            messagebox.showinfo("导出成功", "账户已导出")
+            ts = datetime.now().strftime("%Y%m%d_%H%M%S")
+            fname = f"导出账户_{ts}.xlsx"
+            path = os.path.join(dir_path, fname)
+            self._write_xlsx(path, cols, rows)
+            if messagebox.askyesno("导出成功", "账户已导出，是否打开所在文件夹？"):
+                try:
+                    os.startfile(dir_path)
+                except Exception:
+                    pass
         except Exception as e:
             messagebox.showerror("导出失败", str(e))
 
@@ -252,7 +293,7 @@ class AccountManagerPage(ttk.Frame):
             messagebox.showerror("保存失败", str(e))
 
     def import_accounts(self):
-        paths = filedialog.askopenfilenames(title="选择账户文件", filetypes=[("Excel 文件","*.xlsx"), ("CSV 文件","*.csv"), ("所有文件","*.*")])
+        paths = filedialog.askopenfilenames(title="选择账户文件", filetypes=[("所有文件","*.*"), ("Excel 文件","*.xlsx"), ("CSV 文件","*.csv")])
         if not paths:
             return
         try:
@@ -395,7 +436,31 @@ class AccountManagerPage(ttk.Frame):
         iid = self.tree.identify_row(event.y)
         if iid:
             self.tree.selection_set(iid)
+            parent = self.tree.parent(iid)
+            try:
+                self.menu.delete(0, tk.END)
+            except Exception:
+                pass
+            if parent == "":
+                self.menu.add_command(label="新增账户", command=lambda: self.on_add_in_group(iid))
+            else:
+                self.menu.add_command(label="编辑", command=self.on_edit)
+                self.menu.add_command(label="新增记账", command=self.on_add_transaction_for_account)
             self.menu.post(event.x_root, event.y_root)
+
+    def on_add_in_group(self, group_iid):
+        label = self.tree.item(group_iid, 'text') or ""
+        if '（' in label:
+            typ = label.split('（')[0].strip()
+        else:
+            typ = label.split('-')[0].strip()
+        dlg = AccountDialog(self, {"name": "", "balance": 0.0, "type": typ, "note": ""})
+        self.wait_window(dlg)
+        if dlg.result:
+            a = Account(**dlg.result)
+            add_account(self.state, a)
+            save_state(self.state)
+            self.refresh()
 
     def on_edit(self):
         name = self.selected_account_name()
@@ -415,6 +480,33 @@ class AccountManagerPage(ttk.Frame):
             save_state(self.state)
             self.refresh()
 
+    def on_add_transaction_for_account(self):
+        name = self.selected_account_name()
+        if not name:
+            return
+        initial = {"account": name, "ttype": "支出"}
+        dlg = AddTransactionDialog(self, get_account_names(self.state), initial=initial)
+        self.wait_window(dlg)
+        if getattr(dlg, 'result', None):
+            new = dict(dlg.result)
+            new["id"] = gen_id()
+            try:
+                typ = normalize_ttype(new.get("ttype"))
+                if typ in ["收入","报销类收入","支出","报销类支出"]:
+                    sc = "收入" if typ in ["收入","报销类收入"] else "支出"
+                    cat = (new.get("category") or "").strip()
+                    if cat:
+                        add_category(self.state, sc, cat)
+            except Exception:
+                pass
+            apply_transaction_delta(self.state, new, 1)
+            try:
+                self.state.setdefault("transactions", []).append(new)
+            except Exception:
+                pass
+            save_state(self.state)
+            self.refresh()
+
 class AccountDialog(tk.Toplevel):
     def __init__(self, master, initial):
         super().__init__(master)
@@ -430,7 +522,7 @@ class AccountDialog(tk.Toplevel):
         self.e_balance = ttk.Entry(f)
         self.e_balance.grid(row=1, column=1)
         ttk.Label(f, text="类型").grid(row=2, column=0)
-        self.cb_type = ttk.Combobox(f, values=get_account_types(load_state()), state="readonly")
+        self.cb_type = ttk.Combobox(f, values=get_account_types(load_state()), state="normal")
         self.cb_type.grid(row=2, column=1)
         ttk.Label(f, text="备注").grid(row=3, column=0)
         self.e_note = ttk.Entry(f)

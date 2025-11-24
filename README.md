@@ -1,57 +1,44 @@
-# 个人记账本（accout_book）
+# accout_book
 
-一个使用 Python `tkinter` 构建的桌面记账应用，支持账单记录、账户管理、导入/导出、简单截图识别等功能。
+一个使用 Python/Tkinter 的简易记账桌面应用。
 
-## 特性
-- 记录与管理收入/支出、转账、还款等交易
-- 账户管理与余额联动
-- 账单导入（支付宝/微信/标准模板/电商截图简易识别）
-- 数据备份与重复项去重
-- 自定义可见列与菜单布局
+## 功能
+- 提供基础的记账界面与交互
+- 本地数据保存（请根据实际实现补充说明）
 
 ## 环境要求
-- Python 3.12+
-- 操作系统：Windows/macOS/Linux
-- 依赖：当前仅使用标准库，无第三方依赖
+- Python 3.10 及以上（建议）
+- 平台：Windows（其他平台待验证）
 
 ## 安装与运行
-```powershell
-# 创建并激活虚拟环境（Windows）
-python -m venv .venv
-.venv\Scripts\activate
+```bash
+# 克隆仓库
+git clone https://github.com/<你的GitHub用户名>/accout_book.git
+cd accout_book
 
-# 如需安装依赖（当前为空，可跳过）
+# （可选）创建并激活虚拟环境
+python -m venv .venv
+. .venv/Scripts/Activate.ps1
+
+# 安装依赖
 pip install -r requirements.txt
 
-# 启动应用
+# 运行
 python app.py
 ```
-入口参考 `app.py:15`。
-
-首次运行会在项目根目录下创建 `data/` 并生成账本文件 `data/ledger.json`。
-
-## 配置
-- 若需接入外部 OCR 或 API，请将真实密钥放入环境变量或 `.env` 文件，并提供示例 `env.example`，不要提交真实密钥。
 
 ## 目录结构
 ```
 accout_book/
-├─ app.py               # 应用入口（tkinter）
-├─ ui_*.py              # 界面模块
-├─ storage.py           # 数据读写与账户/交易逻辑
-├─ models.py            # 数据模型
-├─ importers.py         # 各平台导入逻辑
-├─ import_ai.py         # 简易截图文本解析
-├─ ocr_adapter.py       # OCR 适配层（可替换）
-├─ xlsx_reader.py       # 轻量 XLSX 读取
-├─ README.md
-├─ LICENSE
-├─ requirements.txt
-└─ .gitignore
+├─ app.py           # 主程序入口
+├─ README.md        # 项目说明
+├─ LICENSE          # 开源许可证（MIT）
+├─ .gitignore       # Git 忽略规则
+└─ requirements.txt # 依赖列表（如需）
 ```
 
-## 许可证
-本项目使用 MIT 许可证，详情见 `LICENSE`。
+## 许可
+本项目使用 MIT 许可证，详见 `LICENSE` 文件。
 
-## 贡献
-欢迎提交 Issue 与 Pull Request。建议先讨论大型功能或改动方案。
+## 致谢
+欢迎提出 Issue 或提交 Pull Request 改进项目。
