@@ -30,3 +30,8 @@ Thumbs.db
 
 # Logs
 *.log
+
+# Local data (privacy)
+data/
+导入账单/
+导入图片/
