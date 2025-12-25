@@ -6,6 +6,8 @@ from models import TRANSACTION_TYPES
 from utils import parse_datetime, gen_id
 from xlsx_reader import read_xlsx, read_xlsx_rows
 
+STANDARD_TEMPLATE_COLUMNS = ["交易时间", "金额", "消费类别", "所属类别", "账户", "转入账户", "转出账户", "备注"]
+
 def _parse_money(val) -> float:
     s = str(val).strip()
     s = s.replace(',', '')
@@ -72,27 +74,17 @@ def read_csv_rows(path: str) -> List[List[str]]:
     return out
 
 def import_standard_rows(rows: List[Dict], account_names: List[str]) -> List[Dict]:
-    required_common = [
-        "金额",
-        "消费类别",
-        "所属类别",
-        "账户",
-        "转入账户",
-        "转出账户",
-        "备注",
-    ]
+    required_check = [c for c in STANDARD_TEMPLATE_COLUMNS if c != "交易时间"]
     for r in rows[:1]:
-        for k in required_common:
+        for k in required_check:
             if k not in r:
-                missing = [x for x in required_common if x not in r]
-                raise ValueError(f"文件不是标准模板或列名不完整，缺失列：{','.join(missing)}")
+                missing = [x for x in required_check if x not in r]
+                raise ValueError(f"文件不是标准模板或列名不完整。\n缺失列：{','.join(missing)}\n系统要求包含：{','.join(STANDARD_TEMPLATE_COLUMNS)}")
         if ("交易时间" not in r) and ("格式化时间" not in r):
-            raise ValueError("文件不是标准模板或缺少时间列，请包含‘交易时间’或‘格式化时间’")
+            raise ValueError(f"文件不是标准模板或缺少时间列。\n请包含 '交易时间'。\n系统要求包含：{','.join(STANDARD_TEMPLATE_COLUMNS)}")
     out = []
     for r in rows:
         ttype = r.get("所属类别", "").strip()
-        if ttype not in TRANSACTION_TYPES:
-            raise ValueError("所属类别不合法")
         acc = r.get("账户", "").strip()
         if acc and acc not in account_names:
             raise ValueError("账户不存在")

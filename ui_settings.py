@@ -19,6 +19,15 @@ class SettingsPage(ttk.Frame):
             self.time_fmt_var = tk.StringVar(value=((s.get("prefs", {}) or {}).get("bill_list", {}).get("time_format", "date")))
         except Exception:
             self.time_fmt_var = tk.StringVar(value="date")
+        try:
+            s = load_state()
+            inv_en = bool((s.get("prefs", {}) or {}).get("investments_enabled", True))
+            cc_en = bool((s.get("prefs", {}) or {}).get("credit_cards_enabled", True))
+        except Exception:
+            inv_en = True
+            cc_en = True
+        self.investments_var = tk.BooleanVar(value=inv_en)
+        self.credit_cards_var = tk.BooleanVar(value=cc_en)
         self.build_ui()
 
     def build_ui(self):
@@ -46,6 +55,11 @@ class SettingsPage(ttk.Frame):
         timefmt.pack(fill=tk.X, padx=8, pady=8)
         ttk.Radiobutton(timefmt, text="日期+时分秒", value="full", variable=self.time_fmt_var, command=self.on_time_fmt_change).pack(side=tk.LEFT, padx=8, pady=6)
         ttk.Radiobutton(timefmt, text="仅日期", value="date", variable=self.time_fmt_var, command=self.on_time_fmt_change).pack(side=tk.LEFT, padx=8, pady=6)
+
+        modules = ttk.LabelFrame(self, text="功能模块")
+        modules.pack(fill=tk.X, padx=8, pady=8)
+        ttk.Checkbutton(modules, text="启用投资理财模块", variable=self.investments_var, command=self.on_toggle_investments).pack(side=tk.LEFT, padx=8, pady=6)
+        ttk.Checkbutton(modules, text="启用信用卡管理模块", variable=self.credit_cards_var, command=self.on_toggle_credit_cards).pack(side=tk.LEFT, padx=8, pady=6)
 
         store = ttk.LabelFrame(self, text="数据存储与展示")
         store.pack(fill=tk.X, padx=8, pady=8)
@@ -228,6 +242,32 @@ class SettingsPage(ttk.Frame):
             save_state(s)
             try:
                 self.controller.refresh_all()
+            except Exception:
+                pass
+        except Exception:
+            pass
+
+    def on_toggle_investments(self):
+        try:
+            s = load_state()
+            s.setdefault("prefs", {})["investments_enabled"] = bool(self.investments_var.get())
+            save_state(s)
+            try:
+                self.controller.investments_enabled = bool(self.investments_var.get())
+                self.controller.build_sidebar()
+            except Exception:
+                pass
+        except Exception:
+            pass
+
+    def on_toggle_credit_cards(self):
+        try:
+            s = load_state()
+            s.setdefault("prefs", {})["credit_cards_enabled"] = bool(self.credit_cards_var.get())
+            save_state(s)
+            try:
+                self.controller.credit_cards_enabled = bool(self.credit_cards_var.get())
+                self.controller.build_sidebar()
             except Exception:
                 pass
         except Exception:

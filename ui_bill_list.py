@@ -952,6 +952,7 @@ class BillListPage(ttk.Frame):
                     if not r.get("account"):
                         r["account"] = acc
             from utils import tx_signature
+            from storage import sync_batch_to_db
             existing = set()
             for t in s.get("transactions", []):
                 try:
@@ -961,6 +962,7 @@ class BillListPage(ttk.Frame):
             success = 0
             dup = 0
             dup_rows = []
+            added_rows = []
             for r in rows:
                 sig = tx_signature(r)
                 if sig in existing:
@@ -979,8 +981,10 @@ class BillListPage(ttk.Frame):
                 existing.add(sig)
                 s["transactions"].append(r)
                 apply_transaction_delta(s, r, 1)
+                added_rows.append(r)
                 success += 1
             save_state(s)
+            sync_batch_to_db(added_rows)
             self.state = s
             msg = f"批量录入导入完成\n成功: {success} 条"
             if dup:
@@ -1014,7 +1018,7 @@ class BillListPage(ttk.Frame):
         if not messagebox.askyesno("确认", "将覆盖现有账单并按新导入重算账户余额，是否继续？"):
             return
         try:
-            from storage import backup_state
+            from storage import backup_state, sync_batch_to_db, clear_all_transactions_db
             backup_state()
             s = load_state()
             account_names = get_account_names(s)
@@ -1067,6 +1071,7 @@ class BillListPage(ttk.Frame):
                     if not r.get("account"):
                         r["account"] = acc
             s["transactions"] = []
+            clear_all_transactions_db()
             freeze = bool((s.get("prefs", {}) or {}).get("freeze_assets"))
             if not freeze:
                 for a in s.get("accounts", []):
@@ -1079,6 +1084,7 @@ class BillListPage(ttk.Frame):
             dup_rows = []
             success = 0
             dup = 0
+            added_rows = []
             for r in rows:
                 sig = tx_signature(r)
                 if sig in existing:
@@ -1097,8 +1103,10 @@ class BillListPage(ttk.Frame):
                 existing.add(sig)
                 s["transactions"].append(r)
                 apply_transaction_delta(s, r, 1)
+                added_rows.append(r)
                 success += 1
             save_state(s)
+            sync_batch_to_db(added_rows)
             self.state = s
             total = len(rows)
             skipped = total - success
@@ -1841,9 +1849,11 @@ class BillListPage(ttk.Frame):
                     if not r.get("account"):
                         r["account"] = acc
             from utils import tx_signature
+            from storage import sync_batch_to_db
             existing = {tx_signature(t) for t in s.get("transactions", [])}
             success = 0
             dup = 0
+            added_rows = []
             for r in rows:
                 sig = tx_signature(r)
                 if sig in existing:
@@ -1852,8 +1862,10 @@ class BillListPage(ttk.Frame):
                 existing.add(sig)
                 s["transactions"].append(r)
                 apply_transaction_delta(s, r, 1)
+                added_rows.append(r)
                 success += 1
             save_state(s)
+            sync_batch_to_db(added_rows)
             self.state = s
             total = len(rows)
             msg = f"导入完成\n总计: {total} 条\n成功: {success} 条"

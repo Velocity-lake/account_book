@@ -91,6 +91,8 @@ def default_state():
             "menu_layout": "classic",
             "user_management_enabled": False,
             "theme": "light",
+            "investments_enabled": True,
+            "credit_cards_enabled": True,
             "bill_list": {
                 "visible_columns": [
                     "交易时间","金额","消费类别","所属类别","账户","转入账户","转出账户","备注","记账时间","记账来源","id"
@@ -153,6 +155,10 @@ def load_state() -> Dict:
             prefs["menu_layout"] = "classic"
         if "theme" not in prefs:
             prefs["theme"] = "light"
+        if "investments_enabled" not in prefs:
+            prefs["investments_enabled"] = True
+        if "credit_cards_enabled" not in prefs:
+            prefs["credit_cards_enabled"] = True
         bl = prefs.setdefault("bill_list", {})
         if "visible_columns" not in bl:
             bl["visible_columns"] = default_state()["prefs"]["bill_list"]["visible_columns"]
@@ -678,3 +684,38 @@ def list_months(year: str) -> List[str]:
     ms = [r["m"] for r in cur.fetchall()]
     conn.close()
     return ms
+
+def sync_batch_to_db(rows: List[Dict]):
+    if _get_backend() != "sqlite":
+        return
+    _init_db()
+    conn = _db()
+    cur = conn.cursor()
+    try:
+        data = []
+        for t in rows:
+            data.append((
+                t.get("id"), t.get("time"), float(t.get("amount",0)), t.get("category"), 
+                t.get("ttype"), t.get("account"), t.get("to_account"), t.get("from_account"), 
+                t.get("note"), t.get("record_time"), t.get("record_source")
+            ))
+        cur.executemany("INSERT OR IGNORE INTO transactions(id, time, amount, category, ttype, account, to_account, from_account, note, record_time, record_source) VALUES(?,?,?,?,?,?,?,?,?,?,?)", data)
+        conn.commit()
+    except Exception:
+        pass
+    finally:
+        conn.close()
+
+def clear_all_transactions_db():
+    if _get_backend() != "sqlite":
+        return
+    _init_db()
+    conn = _db()
+    cur = conn.cursor()
+    try:
+        cur.execute("DELETE FROM transactions")
+        conn.commit()
+    except Exception:
+        pass
+    finally:
+        conn.close()

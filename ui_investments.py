@@ -217,6 +217,13 @@ class InvestmentsPage(ttk.Frame):
 
     def open_bill_list(self):
         try:
+            from storage import load_state
+            prefs = (load_state().get("prefs", {}) or {})
+            if not bool(prefs.get("investments_enabled", True)):
+                return
+        except Exception:
+            pass
+        try:
             from ui_invest_bill_list import InvestBillListPage
         except Exception:
             messagebox.showerror("错误", "投资账单列表模块未找到")

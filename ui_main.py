@@ -13,7 +13,7 @@ from ui_bill_list import BillListPage
 from ui_account_manager import AccountManagerPage
 from ui_credit_cards import CreditCardPage
 from ui_add_dialog import AddTransactionDialog
-from importers import try_import
+from importers import try_import, STANDARD_TEMPLATE_COLUMNS
 from ui_dashboard import DashboardPage
 from ui_settings import SettingsPage
 from ui_icons import create_icons
@@ -26,6 +26,8 @@ class MainApp(ttk.Frame):
         super().__init__(master)
         self.state = load_state()
         self.user_mgmt_enabled = bool((self.state.get("prefs", {}) or {}).get("user_management_enabled", False))
+        self.investments_enabled = bool((self.state.get("prefs", {}) or {}).get("investments_enabled", True))
+        self.credit_cards_enabled = bool((self.state.get("prefs", {}) or {}).get("credit_cards_enabled", True))
         self.current_user_id = None
         try:
             self.menu_layout_mode = (self.state.get("prefs", {}) or {}).get("menu_layout", 'classic')
@@ -78,9 +80,11 @@ class MainApp(ttk.Frame):
         ttk.Button(self.sidebar, text="首页总览", image=self.icons['dashboard'], compound='left', style='Sidebar.TButton', command=self.show_dashboard).pack(fill=tk.X, padx=8, pady=4)
         ttk.Button(self.sidebar, text="账单列表", image=self.icons['bills'], compound='left', style='Sidebar.TButton', command=self.show_bills).pack(fill=tk.X, padx=8, pady=4)
         ttk.Button(self.sidebar, text="记录账单", image=self.icons['record'], compound='left', style='Sidebar.TButton', command=self.show_record_page).pack(fill=tk.X, padx=8, pady=4)
-        ttk.Button(self.sidebar, text="投资理财", image=self.icons.get('invest'), compound='left', style='Sidebar.TButton', command=self.show_investments).pack(fill=tk.X, padx=8, pady=4)
+        if self.investments_enabled:
+            ttk.Button(self.sidebar, text="投资理财", image=self.icons.get('invest'), compound='left', style='Sidebar.TButton', command=self.show_investments).pack(fill=tk.X, padx=8, pady=4)
         ttk.Button(self.sidebar, text="账户管理", image=self.icons['accounts'], compound='left', style='Sidebar.TButton', command=self.show_accounts).pack(fill=tk.X, padx=8, pady=4)
-        ttk.Button(self.sidebar, text="信用卡管理", image=self.icons['accounts'], compound='left', style='Sidebar.TButton', command=self.show_credit_cards).pack(fill=tk.X, padx=8, pady=4)
+        if self.credit_cards_enabled:
+            ttk.Button(self.sidebar, text="信用卡管理", image=self.icons['accounts'], compound='left', style='Sidebar.TButton', command=self.show_credit_cards).pack(fill=tk.X, padx=8, pady=4)
         ttk.Button(self.sidebar, text="软件设置", style='Sidebar.TButton', command=self.show_settings).pack(fill=tk.X, padx=8, pady=4)
         ttk.Button(self.sidebar, text="使用说明", image=self.icons.get('help'), compound='left', style='Sidebar.TButton', command=self.show_help).pack(fill=tk.X, padx=8, pady=4)
         if self.user_mgmt_enabled:
@@ -118,6 +122,8 @@ class MainApp(ttk.Frame):
         self.pages["accounts"].refresh()
 
     def show_investments(self):
+        if not bool((load_state().get("prefs", {}) or {}).get("investments_enabled", True)):
+            return
         for p in self.pages.values():
             p.pack_forget()
         self.pages["invest"].pack(fill=tk.BOTH, expand=True)
@@ -127,6 +133,8 @@ class MainApp(ttk.Frame):
             pass
 
     def show_credit_cards(self):
+        if not bool((load_state().get("prefs", {}) or {}).get("credit_cards_enabled", True)):
+            return
         for p in self.pages.values():
             p.pack_forget()
         self.pages["credit_cards"].pack(fill=tk.BOTH, expand=True)
@@ -150,6 +158,12 @@ class MainApp(ttk.Frame):
             pass
     def refresh_all(self):
         self.state = load_state()
+        try:
+            self.investments_enabled = bool((self.state.get("prefs", {}) or {}).get("investments_enabled", True))
+            self.credit_cards_enabled = bool((self.state.get("prefs", {}) or {}).get("credit_cards_enabled", True))
+            self.build_sidebar()
+        except Exception:
+            pass
         self.pages["bills"].refresh()
         self.pages["accounts"].refresh()
 
@@ -294,10 +308,12 @@ class MainApp(ttk.Frame):
                 if not r.get("account"):
                     r["account"] = acc
         from utils import tx_signature
+        from storage import sync_batch_to_db
         existing = {tx_signature(t) for t in s.get("transactions", [])}
         dup_rows = []
         success = 0
         dup = 0
+        added_rows = []
         for r in rows:
             sig = tx_signature(r)
             if sig in existing:
@@ -316,8 +332,10 @@ class MainApp(ttk.Frame):
             existing.add(sig)
             s["transactions"].append(r)
             apply_transaction_delta(s, r, 1)
+            added_rows.append(r)
             success += 1
         save_state(s)
+        sync_batch_to_db(added_rows)
         total = len(rows)
         skipped = total - success
         msg = f"导入完成\n总计: {total} 条\n成功: {success} 条"
@@ -542,7 +560,7 @@ class MainApp(ttk.Frame):
         dir_path = filedialog.askdirectory(title="选择保存位置")
         if not dir_path:
             return
-        cols = ["交易时间","金额","消费大类","消费小类","所属类别","账户","转入账户","转出账户","备注"]
+        cols = list(STANDARD_TEMPLATE_COLUMNS)
         ts = datetime.now().strftime("%Y%m%d%H%M%S")
         fname = f"标准账单模版_{ts}.xlsx"
         path = os.path.join(dir_path, fname)
