@@ -39,3 +39,6 @@ data/
 
 # 忽略软件界面文件夹
 软件界面/
+
+# Workspace memory (project-level working log, never track)
+.workbuddy/
